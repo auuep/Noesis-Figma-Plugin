@@ -26,7 +26,6 @@ export interface ReviewNamesMessage {
 
 export interface ApplyRenamesMessage {
   type: 'apply-renames'
-  renames: Array<{ nodeId: string; newName: string }>
 }
 
 interface NamesReviewedMessage {
@@ -63,6 +62,7 @@ interface ImageDataMessage {
 // --- State ---
 let currentXaml = ''
 let currentImageExports: ImageExport[] = []
+let pendingRenames: Array<{ node: SceneNode; newName: string }> = []
 
 // --- Generate XAML from current selection ---
 
@@ -193,7 +193,7 @@ figma.ui.onmessage = async (msg: GenerateMessage | ExportMessage | ReviewNamesMe
       handleReviewNames()
       break
     case 'apply-renames':
-      handleApplyRenames(msg.renames)
+      handleApplyRenames()
       break
   }
 }
@@ -201,6 +201,7 @@ figma.ui.onmessage = async (msg: GenerateMessage | ExportMessage | ReviewNamesMe
 function handleReviewNames(): void {
   const selection = figma.currentPage.selection
   if (selection.length === 0) {
+    pendingRenames = []
     figma.ui.postMessage({
       type: 'names-reviewed',
       items: [],
@@ -210,6 +211,22 @@ function handleReviewNames(): void {
   }
 
   const items = reviewLayerNames(selection)
+
+  // Keep live node references on the main thread — avoids ID round-trip through the UI
+  const nodeMap = new Map<string, SceneNode>()
+  function indexNodes(node: SceneNode): void {
+    nodeMap.set(node.id, node)
+    if ('children' in node) {
+      for (const child of (node as ChildrenMixin).children) indexNodes(child as SceneNode)
+    }
+  }
+  for (const node of selection) indexNodes(node)
+
+  pendingRenames = items.map(item => ({
+    node: nodeMap.get(item.nodeId)!,
+    newName: item.suggestedName,
+  }))
+
   figma.ui.postMessage({
     type: 'names-reviewed',
     items,
@@ -217,19 +234,17 @@ function handleReviewNames(): void {
   } as NamesReviewedMessage)
 }
 
-function handleApplyRenames(renames: Array<{ nodeId: string; newName: string }>): void {
+function handleApplyRenames(): void {
   let count = 0
-  for (const { nodeId, newName } of renames) {
+  for (const { node, newName } of pendingRenames) {
     try {
-      const node = figma.getNodeById(nodeId) as SceneNode | null
-      if (node && 'name' in node) {
-        node.name = newName
-        count++
-      }
+      node.name = newName
+      count++
     } catch (e) {
-      console.warn(`Could not rename node ${nodeId}:`, e)
+      console.warn(`Could not rename node "${node.name}":`, e)
     }
   }
+  pendingRenames = []
   figma.ui.postMessage({ type: 'renames-applied', count } as RenamesAppliedMessage)
 }
 

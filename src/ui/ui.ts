@@ -41,7 +41,7 @@ type PluginMessage = XamlReadyMessage | ExportReadyMessage | NamesReviewedMessag
 
 let currentXaml = ''
 let isExporting = false
-let pendingRenames: Array<{ nodeId: string; newName: string }> = []
+let hasPendingRenames = false
 let activeTab: 'xaml' | 'names' = 'xaml'
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -136,9 +136,9 @@ async function handleExportReady(msg: ExportReadyMessage): Promise<void> {
 }
 
 function handleNamesReviewed(msg: NamesReviewedMessage): void {
-  pendingRenames = msg.items.map(item => ({ nodeId: item.nodeId, newName: item.suggestedName }))
+  hasPendingRenames = msg.hasSelection && msg.items.length > 0
 
-  if (!msg.hasSelection || msg.items.length === 0) {
+  if (!hasPendingRenames) {
     reviewList.innerHTML = ''
     reviewEmpty.style.display = 'flex'
     reviewFooter.style.display = 'none'
@@ -211,7 +211,7 @@ function switchTab(tab: 'xaml' | 'names'): void {
   const isXaml = tab === 'xaml'
   previewArea.style.display = isXaml ? 'block' : 'none'
   reviewArea.style.display = isXaml ? 'none' : 'block'
-  reviewFooter.style.display = (!isXaml && pendingRenames.length > 0) ? 'flex' : 'none'
+  reviewFooter.style.display = (!isXaml && hasPendingRenames) ? 'flex' : 'none'
 }
 
 tabXaml.addEventListener('click', () => switchTab('xaml'))
@@ -221,10 +221,10 @@ tabNames.addEventListener('click', () => {
 })
 
 btnApply.addEventListener('click', () => {
-  if (pendingRenames.length === 0) return
+  if (!hasPendingRenames) return
   ;(btnApply as HTMLButtonElement).disabled = true
   btnApply.textContent = 'Applying...'
-  parent.postMessage({ pluginMessage: { type: 'apply-renames', renames: pendingRenames } }, '*')
+  parent.postMessage({ pluginMessage: { type: 'apply-renames' } }, '*')
 })
 
 // ── Button handlers ────────────────────────────────────────────────────────
