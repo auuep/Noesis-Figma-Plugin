@@ -2,6 +2,26 @@
 
 ---
 
+## #2 — Name reviewer suggests closest valid tag for unknown tags
+
+**Status:** Backlog
+
+**Summary:**
+When a layer is named with an unrecognized tag (e.g. `Buttons.Start`), the reviewer currently strips the tag entirely and suggests `Start`. It should instead suggest the closest matching valid tag from the registry (e.g. `Button.Start`).
+
+**Current behavior:**
+`Buttons.Start` → suggested: `Start` (unknown tag stripped, bare name returned)
+
+**Expected behavior:**
+`Buttons.Start` → suggested: `Button.Start` (closest valid tag substituted)
+
+**Implementation:**
+- In `src/core/name-reviewer.ts`, when a tag candidate is not in the registry, run a fuzzy/closest match against all known tags in `TAG_REGISTRY` (e.g. case-insensitive substring match or edit distance)
+- If a confident match is found, use that tag in the suggestion and change the issue label from `unknown tag "Buttons"` to something like `did you mean "Button"?`
+- If no close match is found, fall back to the current behavior (strip the tag, keep the name)
+
+---
+
 ## #1 — Unreal Engine export mode
 
 **Status:** Backlog
